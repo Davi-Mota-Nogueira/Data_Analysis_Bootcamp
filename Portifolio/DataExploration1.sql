@@ -100,3 +100,65 @@ FROM CovidDeaths
 WHERE continent is not null
 GROUP BY date
 ORDER BY 1,2
+
+SELECT SUM(new_cases) as CasesInDay,
+SUM(cast(new_deaths as float)) as DeathsInDay,
+(SUM(cast(new_deaths as float))/NULLIF(SUM(new_cases), 0)) * 100 AS DeathPercentage
+FROM CovidDeaths
+ORDER BY 1,2
+
+-- Total Population vs Vaccinations
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as SumOfVaccinationsUpToDate
+FROM CovidDeaths dea
+JOIN CovidVaccinations vac
+	ON dea.location = vac.location AND dea.date = vac.date
+WHERE dea.continent is not null
+ORDER BY 1,2,3
+
+-- Use of CTE
+
+WITH PopvsVac (continent, location, date, population, new_vaccinations, SumOfVaccinationsUpToDate)
+AS
+(
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as SumOfVaccinationsUpToDate
+FROM CovidDeaths dea
+JOIN CovidVaccinations vac
+	ON dea.location = vac.location AND dea.date = vac.date
+WHERE dea.continent is not null
+)
+SELECT *, (SumOfVaccinationsUpToDate/population) * 100
+FROM PopvsVac
+
+
+-- Temp table
+DROP TABLE IF EXISTS #PercentagePopVaccinated
+CREATE TABLE #PercentagePopVaccinated(
+	Continent nvarchar(255),
+	Location nvarchar(255),
+	Date datetime,
+	Population numeric,
+	New_vaccinations numeric,
+	SumOfVaccinationsUpToDate numeric
+)
+
+INSERT INTO #PercentagePopVaccinated
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as SumOfVaccinationsUpToDate
+FROM CovidDeaths dea
+JOIN CovidVaccinations vac
+	ON dea.location = vac.location AND dea.date = vac.date
+WHERE dea.continent is not null
+
+SELECT *, (SumOfVaccinationsUpToDate/population) * 100
+FROM #PercentagePopVaccinated
+
+-- Creating View for future visualizations
+CREATE VIEW PercentagePopVaccinated as
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as SumOfVaccinationsUpToDate
+FROM CovidDeaths dea
+JOIN CovidVaccinations vac
+	ON dea.location = vac.location AND dea.date = vac.date
+WHERE dea.continent is not null
